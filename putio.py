@@ -66,7 +66,7 @@ class Client(object):
         self.Account = type('Account', (_Account,), attributes)
 
     def request(self, path, method='GET', params=None, data=None, files=None,
-                headers=None, raw=False, stream=False):
+                headers=None, raw=False, stream=False, redirects=True):
         """
         Wrapper around requests.request()
 
@@ -91,7 +91,7 @@ class Client(object):
 
         response = self.session.request(
             method, url, params=params, data=data, files=files,
-            headers=headers, allow_redirects=True, stream=stream)
+            headers=headers, allow_redirects=redirects, stream=stream)
         logger.debug('response: %s', response)
         if raw:
             return response
@@ -171,6 +171,16 @@ class _File(_BaseResource):
         else:
             self._download_file(dest, delete_after_download)
 
+    def get_link(self):
+        response = self.client.request(
+            '/files/%s/download' % self.id, raw=True, stream=False, redirects=False)
+        
+	if response.is_redirect:
+            try:
+                return response.headers['location']
+            except (KeyError):
+                return None
+
     def _download_directory(self, dest='.', delete_after_download=False):
         name = self.name
         if isinstance(name, unicode):
@@ -235,7 +245,7 @@ class _Transfer(_BaseResource):
     @classmethod
     def add_url(cls, url, parent_id=0, extract=False, callback_url=None):
         d = cls.client.request('/transfers/add', method='POST', data=dict(
-            url=url, save_parent_id=parent_id, extract=extract,
+            url=url, parent_id=parent_id, extract=extract,
             callback_url=callback_url))
         t = d['transfer']
         return cls(t)
@@ -245,7 +255,7 @@ class _Transfer(_BaseResource):
         with open(path) as f:
             files = {'file': f}
             d = cls.client.request('/files/upload', method='POST', files=files,
-                                   data=dict(save_parent_id=parent_id,
+                                   data=dict(parent_id=parent_id,
                                              extract=extract,
                                              callback_url=callback_url))
         t = d['transfer']
